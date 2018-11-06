@@ -14,15 +14,11 @@
 #define LIFX_HEADER_ORIGIN 0      // Must be 0 
 // Header Parameters
 #define LIFX_HEADER_SOURCE 3549
+#define LIFX_HEADER_RES_REQ 0 // Have light send back an acknowledgement. Not used in this code.
+#define LIFX_HEADER_ACK_REQ 0 // Request a response from the light. Not used in this code.
 
-
-
-const uint8_t LIFX_HEADER_TARGET[LIFX_HEADER_TARGET_LEN] = {
-  0xD0, 0x73, 0xD5, 0x30, 0x05, 0x45, 0x00, 0x00
-};
-
-const char *ssid = "125 2.4GHz";
-const char *password = "fivetimesfive";
+const char *WIFI_SSID = "125 2.4GHz";
+const char *WIFI_PASSWORD = "fivetimesfive";
 
 const uint8_t MAX_LX_DEVICES = 16;
 uint8_t LX_DEVICES = 0;
@@ -83,8 +79,13 @@ typedef struct {
 byte packetBuffer[128];
 Ticker ticker;
 
+// Payload bytes: length of the actual message
+// Tagged: should be 1 unless discovering LIFX devices
+// TargetMAC: MAC address array
+// MessageType: ID of the message included in this packet
 void lxMakeFrame(lx_protocol_header_t *lxHead, uint8_t payloadBytes,
-                 uint8_t tagged, uint8_t *target, uint16_t message) {
+                 uint8_t tagged, uint8_t *targetMAC, uint16_t messageType,
+                 uint8_t sequenceNum=0) {
   /* frame */
   lxHead->size = sizeof(lx_protocol_header_t) + payloadBytes;
   lxHead->protocol = LIFX_HEADER_PROTOCOL; // Must be 1024
@@ -95,14 +96,14 @@ void lxMakeFrame(lx_protocol_header_t *lxHead, uint8_t payloadBytes,
 
   /* frame address */
   for (uint8_t i = 0; i < LIFX_HEADER_TARGET_LEN; i++) {
-    lxHead->target[i] = target[i];
+    lxHead->target[i] = targetMAC[i];
   }
-  lxHead->res_required = (uint8_t)0;
-  lxHead->ack_required = (uint8_t)0;
-  lxHead->sequence = (uint8_t)0;
+  lxHead->res_required = LIFX_HEADER_RES_REQ;
+  lxHead->ack_required = LIFX_HEADER_ACK_REQ;
+  lxHead->sequence = sequenceNum;
 
   /* protocol header */
-  lxHead->type = message;
+  lxHead->type = messageType;
 }
 
 void lxDiscovery() {
@@ -224,9 +225,9 @@ void setup() {
   Serial.println();
   Serial.println();
   Serial.print("Connecting to ");
-  Serial.println(ssid);
+  Serial.println(WIFI_SSID);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
