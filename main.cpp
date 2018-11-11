@@ -20,11 +20,13 @@
 #define LIFX_HEADER_ACK_REQ 0 // Request a response from the light. Not used in this code.
 
 #define LIFX_MSG_GET_SERVICE 2
+#define LIFX_MSG_SET_POWER 117
 
 #define LIFX_UDP_PORT 56700 // Can be changed for newer bulbs, best compatibility use 56700
 
 const char *WIFI_SSID = "125 2.4GHz";
 const char *WIFI_PASSWORD = "fivetimesfive";
+#define LIFX_TARGET {0xD0, 0x73, 0xD5, 0x30, 0x05, 0x45, 0x00, 0x00}
 
 IPAddress bcastAddr(255, 255, 255, 255);
 int lxPort = 56700;
@@ -65,116 +67,80 @@ typedef struct {
 } lx_msg_stateService_t;
 #pragma pack(pop)
 
-// lx_protocol_header_t testHeader = {
-//   .size = 36,
-//   .protocol = 1024,
-//   .addressable = 1,
-//   .tagged = 
-// };
-
 #pragma pack(push, 1)
 typedef struct {
 	/* set power */
 	uint16_t level;
 	uint32_t duration;
-} lx_set_power_t;
+} lx_msg_setPower_t;
 #pragma pack(pop)
 
+static void print_header(lx_protocol_header_t* head) {
+	Serial.printf("Size: %d\n", head->size);
+	Serial.printf("Protocol: %d\n", head->protocol);
+	Serial.printf("Addressable: %d\n", head->addressable);
+	Serial.printf("Tagged: %d\n", head->tagged);
+	Serial.printf("Origin: %d\n", head->origin);
+	Serial.printf("Source: %d\n", head->source);
+	Serial.printf("Target: ");
+	for (uint8_t i = 0; i < LIFX_HEADER_TARGET_LEN; ++i) {
+		Serial.printf("%02X ", head->target[i]);
+	}
+	Serial.println();
+	Serial.printf("Reserved: ");
+	for (uint8_t i = 0; i < LIFX_HEADER_RESERVED_LEN; ++i) {
+		Serial.printf("%02X ", head->reserved[i]);
+	}
+	Serial.println();
+	Serial.printf("Response Required: %d\n", head->res_required);
+	Serial.printf("Acknowledgement Required: %d\n", head->ack_required);
+	Serial.printf("Sequence: %d\n", head->sequence);
+	Serial.printf("Type: %d\n", head->type);
+	Serial.println();
+}
+
+static void print_msgStateService(lx_msg_stateService_t* msg) {
+	Serial.printf("Service: %d\n", msg->service);
+	Serial.printf("Port: %d\n", msg->port);
+	Serial.println();
+}
+
+static lx_protocol_header_t discovery_header = {
+	sizeof(lx_protocol_header_t),
+	LIFX_HEADER_PROTOCOL,
+	LIFX_HEADER_ADDRESSABLE,                          
+	0, // only for discovery header
+	LIFX_HEADER_ORIGIN,
+	LIFX_HEADER_SOURCE,
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	LIFX_HEADER_RES_REQ,
+	LIFX_HEADER_ACK_REQ,
+	0,
+	LIFX_MSG_GET_SERVICE
+};
+
+static lx_protocol_header_t setPower_header = {
+	sizeof(lx_protocol_header_t)+sizeof(lx_msg_setPower_t),
+	LIFX_HEADER_PROTOCOL,
+	LIFX_HEADER_ADDRESSABLE,                          
+	0, // 1 for all other messages
+	LIFX_HEADER_ORIGIN,
+	LIFX_HEADER_SOURCE,
+	LIFX_TARGET,
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+	LIFX_HEADER_RES_REQ,
+	LIFX_HEADER_ACK_REQ,
+	0,
+	LIFX_MSG_SET_POWER
+};
+
+static lx_msg_setPower_t setPower_msg = {
+	65535,
+	500
+};
 
 byte packetBuffer[128];
-
-// void lxDiscovery() {
-// 	/* Build lxDiscovery payload */
-// 	byte target_addr[8] = {0};
-// 	lx_protocol_header_t *lxHead;
-// 	lxHead = (lx_protocol_header_t *)calloc(1, sizeof(lx_protocol_header_t));
-// 	lxMakeFrame(lxHead, 0, 1, target_addr, 2);
-
-// 	/* Start listening for responses */
-// 	UDP.begin(4097);
-// 	delay(500);
-// 	/* Send a couple of discovery packets out to the network*/
-// 	for (int i = 0; i < 1; i++) {
-// 	byte *b = (byte *)lxHead;
-// 	UDP.beginPacket(bcastAddr, lxPort);
-// 	UDP.write(b, sizeof(lx_protocol_header_t));
-// 	UDP.endPacket();
-
-// 	delay(500);
-// 	}
-
-// 	free(lxHead);
-
-// 	for (int j = 0; j < 20; j++) {
-
-// 	int sizePacket = UDP.parsePacket();
-// 	if (sizePacket) {
-// 		UDP.read(packetBuffer, sizePacket);
-// 		byte target_addr[SIZE_OF_MAC];
-// 		memcpy(target_addr, packetBuffer + 8, SIZE_OF_MAC);
-// 		// Print MAC
-// 		for (int i = 0; i < sizeof(target_addr); i++) {
-// 		Serial.print(target_addr[i - 1], HEX);
-// 		Serial.print(" ");
-// 		}
-// 		Serial.println();
-
-// 		// Check if this device is new
-// 		uint8_t previouslyKnownDevice = 0;
-// 		for (int i = 0; i < LX_DEVICES; i++) {
-// 		if (!memcmp(lxDevices[i], target_addr, SIZE_OF_MAC)) {
-// 			Serial.println("Previously seen target");
-// 			previouslyKnownDevice = 1;
-// 			break;
-// 		}
-// 		}
-// 		// Store new devices
-// 		if (!previouslyKnownDevice) {
-// 		lxDevicesAddr[LX_DEVICES] = (uint32_t)UDP.remoteIP();
-
-// 		Serial.println(UDP.remoteIP());
-// 		memcpy(lxDevices[LX_DEVICES++], target_addr, SIZE_OF_MAC);
-// 		Serial.print("Storing device as LX_DEVICE ");
-// 		Serial.println(LX_DEVICES);
-// 		}
-// 	}
-// 	delay(20);
-// 	}
-// }
-
-// void lxPower(uint16_t level) {
-//   for (int i = 0; i < LX_DEVICES; i++) {
-//     /* Set target_addr from know lxDevices */
-//     byte target_addr[8] = {0};
-//     memcpy(target_addr, lxDevices[i], SIZE_OF_MAC);
-
-//     /* Build payload */
-//     uint8_t type = 117;
-//     uint32_t duration = 500;
-
-//     lx_protocol_header_t *lxHead;
-//     lxHead = (lx_protocol_header_t *)calloc(1, sizeof(lx_protocol_header_t));
-//     lxMakeFrame(lxHead, sizeof(lx_set_power_t), 0, target_addr, type);
-
-//     lx_set_power_t *lxSetPower;
-//     lxSetPower = (lx_set_power_t *)calloc(1, sizeof(lx_set_power_t));
-//     lxSetPower->duration = 500;
-//     lxSetPower->level = level;
-
-//     UDP.beginPacket(lxDevicesAddr[i], lxPort);
-//     byte *b = (byte *)lxHead;
-//     UDP.write(b, sizeof(lx_protocol_header_t));
-//     b = (byte *)lxSetPower;
-//     UDP.write(b, sizeof(lx_set_power_t));
-//     UDP.endPacket();
-
-//     free(lxSetPower);
-//     free(lxHead);
-
-//     Serial.println(lxDevicesAddr[i]);
-//   }
-//   Serial.println();
-// }
 
 void isr_p2() {
 	buttonPushed = 2;
@@ -216,46 +182,7 @@ void setup() {
 	Serial.println();
 }
 
-lx_protocol_header_t discovery_header = {
-	sizeof(lx_protocol_header_t),
-	LIFX_HEADER_PROTOCOL,
-	LIFX_HEADER_ADDRESSABLE,
-	0, // only for discovery header
-	LIFX_HEADER_ORIGIN,
-	LIFX_HEADER_SOURCE,
-	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	LIFX_HEADER_RES_REQ,
-	LIFX_HEADER_ACK_REQ,
-	0,
-	LIFX_MSG_GET_SERVICE
-};
-
-lx_protocol_header_t read_header;
-
-static void printHeader(lx_protocol_header_t* head) {
-	Serial.printf("Size: %d\n", head->size);
-	Serial.printf("Protocol: %d\n", head->protocol);
-	Serial.printf("Addressable: %d\n", head->addressable);
-	Serial.printf("Tagged: %d\n", head->tagged);
-	Serial.printf("Origin: %d\n", head->origin);
-	Serial.printf("Source: %d\n", head->source);
-	Serial.printf("Target: ");
-	for (uint8_t i = 0; i < LIFX_HEADER_TARGET_LEN; ++i) {
-		Serial.printf("%02X ", head->target[i]);
-	}
-	Serial.println();
-	Serial.printf("Reserved: ");
-	for (uint8_t i = 0; i < LIFX_HEADER_RESERVED_LEN; ++i) {
-		Serial.printf("%02X ", head->reserved[i]);
-	}
-	Serial.println();
-	Serial.printf("Response Required: %d\n", head->res_required);
-	Serial.printf("Acknowledgement Required: %d\n", head->ack_required);
-	Serial.printf("Sequence: %d\n", head->sequence);
-	Serial.printf("Type: %d\n", head->type);
-	Serial.println();
-}
+static bool turnOn = true;
 
 void loop() {
 	interrupts();
@@ -270,8 +197,8 @@ void loop() {
 	Serial.println();
 
 	if (buttonPushed==0) {
-		Serial.println("SEND HEADER");
-		printHeader(&discovery_header);
+		Serial.println("SEND HEADER: GetService");
+		print_header(&discovery_header);
 
 		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
 		char* discoveryHead_ptr = (char*) (&discovery_header);
@@ -280,16 +207,36 @@ void loop() {
 
 		delay(500);
 
-		int packetSize = UDP.parsePacket();
-		char* readHead_ptr = (char*) (&read_header);
-		int readSize = (packetSize < sizeof(lx_protocol_header_t)) ? packetSize : sizeof(lx_protocol_header_t);
-		UDP.read(readHead_ptr, readSize);
+		lx_protocol_header_t read_header;
+		lx_msg_stateService_t read_msg;
 
-		Serial.println("RECEIVE HEADER");
-		printHeader(&read_header);
+		int packetSize = UDP.parsePacket();
+		printf("Packet size: %d\n\n", packetSize);
+		UDP.read((char*) (&read_header), sizeof(lx_protocol_header_t));
+		UDP.read((char*)(&read_msg), sizeof(lx_msg_stateService_t));
+		Serial.println("RECEIVED HEADER");
+		print_header(&read_header);
+		Serial.println("RECEIVED MESSAGE");
+		print_msgStateService(&read_msg);
 	}
 	else if (buttonPushed==2) {
-		Serial.println("TWO!");
+		Serial.println("SEND HEADER: SetPower");
+		print_header(&setPower_header);
+		Serial.println("SEND MSG: SetPower");
+
+		if (turnOn) {
+			setPower_msg.level = 65535;
+		}
+		else {
+			setPower_msg.level = 65535;
+		}
+		turnOn = !turnOn;
+
+		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+		UDP.write((char*)(&setPower_header), sizeof(lx_protocol_header_t));
+		UDP.write((char*)(&setPower_msg), sizeof(lx_msg_setPower_t));
+		UDP.endPacket();
+
 	}
 
 	delay(500);
