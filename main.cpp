@@ -1,39 +1,38 @@
-// https://github.com/aijayadams/esp8266-lifx
+// Based on https://github.com/aijayadams/esp8266-lifx
 
 #include <Arduino.h>
-
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 
-#define DEBUG 1
+/*
+ * Addresses and Settings
+ */
 
-// Header
-#define LIFX_HEADER_TARGET_LEN 8 
-#define LIFX_HEADER_RESERVED_LEN 6
-// Header Constants
-#define LIFX_HEADER_PROTOCOL 1024 // Must be 1024
-#define LIFX_HEADER_ADDRESSABLE 1 // Indicates header includes target address, must be 1
-#define LIFX_HEADER_ORIGIN 0      // Must be 0 
-// Header Parameters
-#define LIFX_HEADER_SOURCE 3549
-#define LIFX_HEADER_RES_REQ 0 // Have light send back an acknowledgement. Not used in this code.
-#define LIFX_HEADER_ACK_REQ 0 // Request a response from the light. Not used in this code.
-
-#define LIFX_MSG_GET_SERVICE 2
-#define LIFX_MSG_SET_POWER 117
-
-#define LIFX_UDP_PORT 56700 // Can be changed for newer bulbs, best compatibility use 56700
-
-const char *WIFI_SSID = "125 2.4GHz";
-const char *WIFI_PASSWORD = "fivetimesfive";
+// WiFi Settings
+const char *WIFI_SSID = "kcjnet2";
+const char *WIFI_PASSWORD = "pokey.bear7";
+// LIFX MAC Address
 #define LIFX_TARGET {0xD0, 0x73, 0xD5, 0x30, 0x05, 0x45, 0x00, 0x00}
+#define LIFX_UDP_PORT 56700
+
+/*
+ * WiFi Setup
+ */
+
+#define BUFFER_LEN 128
+#define TIMEOUT_MS 500
 
 IPAddress bcastAddr(255, 255, 255, 255);
-int lxPort = 56700;
-
 WiFiUDP UDP;
+char packetBuffer[128];
 
-int8_t buttonPushed = -1;
+
+/*
+ * LIFX Packets
+ */
+
+#define LIFX_HEADER_TARGET_LEN 8
+#define LIFX_HEADER_RESERVED_LEN 6
 
 #pragma pack(push, 1)
 typedef struct {
@@ -45,8 +44,8 @@ typedef struct {
 	uint8_t origin : 2;       // Message origin indicator: must be zero (0)
 	uint32_t source;          // Source identifier: unique value set by the client, used by responses
 	/* frame address */
-	uint8_t target[8];        // 6 byte device address (MAC address) or zero (0) means all devices
-	uint8_t reserved[6];      // Must all be zero (0)
+	uint8_t target[LIFX_HEADER_TARGET_LEN];        // 6 byte device address (MAC address) or zero (0) means all devices
+	uint8_t reserved[LIFX_HEADER_RESERVED_LEN];    // Must all be zero (0)
 	uint8_t res_required : 1; // Response message required
 	uint8_t ack_required : 1; // Acknowledgement message required
 	uint8_t : 6;              // Reserved
@@ -69,13 +68,19 @@ typedef struct {
 
 #pragma pack(push, 1)
 typedef struct {
-	/* set power */
 	uint16_t level;
 	uint32_t duration;
 } lx_msg_setPower_t;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct {
+	uint16_t level;
+} lx_msg_statePower_t;
+#pragma pack(pop)
+
 static void print_header(lx_protocol_header_t* head) {
+	Serial.println("HEADER");
 	Serial.printf("Size: %d\n", head->size);
 	Serial.printf("Protocol: %d\n", head->protocol);
 	Serial.printf("Addressable: %d\n", head->addressable);
@@ -99,74 +104,174 @@ static void print_header(lx_protocol_header_t* head) {
 	Serial.println();
 }
 
+static void print_msgSetPower(lx_msg_setPower_t* msg) {
+	Serial.println("MESSAGE: SetPower");
+	Serial.printf("Level: %d\n", msg->level);
+	Serial.printf("Duration: %d\n", msg->duration);
+	Serial.println();
+}
+
 static void print_msgStateService(lx_msg_stateService_t* msg) {
+	Serial.println("MESSAGE: StateService");
 	Serial.printf("Service: %d\n", msg->service);
 	Serial.printf("Port: %d\n", msg->port);
 	Serial.println();
 }
 
+static void print_msgStatePower(lx_msg_statePower_t* msg) {
+	Serial.println("MESSAGE: StatePower");
+	Serial.printf("Level: %d\n", msg->level);
+	Serial.println();
+}
+
+/*
+ * Defined LIFX Messages
+ */
+
+#define LIFX_SOURCE 3549
+
+#define LIFX_TYPE_DISCOVERY 2
+#define LIFX_TYPE_GETPOWER 20
+#define LIFX_TYPE_SETPOWER 21
+#define LIFX_TYPE_STATEPOWER 22
+
 static lx_protocol_header_t discovery_header = {
-	sizeof(lx_protocol_header_t),
-	LIFX_HEADER_PROTOCOL,
-	LIFX_HEADER_ADDRESSABLE,                          
-	0, // only for discovery header
-	LIFX_HEADER_ORIGIN,
-	LIFX_HEADER_SOURCE,
-	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	LIFX_HEADER_RES_REQ,
-	LIFX_HEADER_ACK_REQ,
-	0,
-	LIFX_MSG_GET_SERVICE
+	sizeof(lx_protocol_header_t), // Size
+	1024, // Protocol
+	1, // Addressable
+	1, // Tagged
+	0, // Origin
+	LIFX_SOURCE, // Source
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Target
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Reserved
+	0, // Response Required
+	0, // Acknowledge Requried
+	0, // Sequence
+	LIFX_TYPE_DISCOVERY // Type (Discovery)
+};
+
+static lx_protocol_header_t getPower_header = {
+	sizeof(lx_protocol_header_t), // Size
+	1024, // Protocol
+	1, // Addressable
+	0, // Tagged
+	0, // Origin
+	LIFX_SOURCE, // Source
+	LIFX_TARGET, // Target
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Reserved
+	1, // Response Requested
+	0, // Acknowledge Requested
+	0, // Sequence
+	LIFX_TYPE_GETPOWER // Type (GetPower)
 };
 
 static lx_protocol_header_t setPower_header = {
 	sizeof(lx_protocol_header_t)+sizeof(lx_msg_setPower_t),
-	LIFX_HEADER_PROTOCOL,
-	LIFX_HEADER_ADDRESSABLE,                          
-	0, // 1 for all other messages
-	LIFX_HEADER_ORIGIN,
-	LIFX_HEADER_SOURCE,
-	LIFX_TARGET,
-	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	LIFX_HEADER_RES_REQ,
-	LIFX_HEADER_ACK_REQ,
-	0,
-	LIFX_MSG_SET_POWER
+	1024, // Protocol
+	1, // Addressable
+	0, // Tagged
+	0, // Origin
+	LIFX_SOURCE, // Source
+	LIFX_TARGET, // Target
+	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Reserved
+	0, // Response Requested
+	0, // Acknowledge Requested
+	0, // Sequence
+	LIFX_TYPE_SETPOWER // Type (SetPower)
 };
 
 static lx_msg_setPower_t setPower_msg = {
-	65535,
-	500
+	65535 // Level
 };
 
-byte packetBuffer[128];
+/*
+ * LIFX Functions
+ */
 
-void isr_p2() {
+// void lifx_discover() {
+// 	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+//     UDP.write( (char*) &discovery_header, sizeof(lx_protocol_header_t));
+//     UDP.endPacket();
+
+//   	unsigned long started = millis();
+//   	while (millis() - started < TIMEOUT_MS) {
+//     	int packetLen = UDP.parsePacket();
+//     	if (packetLen && packetLen < BUFFER_LEN) {
+//      		UDP.read(packetBuffer, sizeof(packetBuffer));
+
+//       		if (((lx_protocol_header_t*)packetBuffer)->type == LIFX_TYPE_STATEPOWER) {
+//         		power = ((lx_msg_statePower_t*)(packetBuffer + sizeof(lx_protocol_header_t)))->level;
+//         		return power;
+//       		} else {
+//         		Serial.print("Unexpected Packet type: ");
+//         		Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+//       		}
+//     	}
+//   	}
+// }
+
+uint16_t lifx_getPower() {
+  	uint16_t power = 0;
+	
+  	// Send a packet on startup
+  	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+  	UDP.write((char *) &getPower_header, sizeof(lx_protocol_header_t));
+  	UDP.endPacket();
+	
+  	unsigned long started = millis();
+  	while (millis() - started < TIMEOUT_MS) {
+  	  	int packetLen = UDP.parsePacket();
+  	  	if (packetLen && packetLen < BUFFER_LEN) {
+  	  		int read = UDP.read(packetBuffer, packetLen);
+			Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
+			lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
+			lx_msg_statePower_t* payload = (lx_msg_statePower_t*) (packetBuffer + sizeof(lx_protocol_header_t));
+			print_header(header);
+			print_msgStatePower(payload);
+  	  		if (header->type == LIFX_TYPE_STATEPOWER) {
+  	  	    	power = payload->level;
+  	  	    	return power;
+  	  	  	} else {
+  	  	    	Serial.print("Unexpected Packet type: ");
+  	  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+  	  	  	}
+  	  	}
+  	}
+	
+  	return power;
+}
+
+/*
+ * Button Interrupts
+ */
+int8_t buttonPushed = -1;
+
+ICACHE_RAM_ATTR void isr_p2() {
 	buttonPushed = 2;
 }
 
-void isr_p0() {
+ICACHE_RAM_ATTR void isr_p0() {
 	buttonPushed = 0;
 }
 
-void setup() {
-	Serial.begin(230400);
-	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+/*
+ * Wifi Setup
+ */
 
+void setup() {
+	Serial.begin(115200);
+	Serial.println();
+
+	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 	while (WiFi.status() != WL_CONNECTED) {
-	#if DEBUG
-	delay(500);
-	Serial.print(".");
-	#endif
+		delay(500);
+		Serial.print(".");
 	}
 
-	#if DEBUG
 	Serial.println();
 	Serial.println("WiFi connected");
 	Serial.println("IP address: ");
 	Serial.println(WiFi.localIP());
-	#endif
 
 	bcastAddr = WiFi.localIP();
 	bcastAddr[3] = 255;
@@ -182,14 +287,13 @@ void setup() {
 	Serial.println();
 }
 
-static bool turnOn = true;
-
 void loop() {
+	noInterrupts();
+	buttonPushed = -1;
 	interrupts();
 	while (buttonPushed==-1) {
 		delay(50); // Spinning causes WDT to reset
 	}
-	noInterrupts();
 
 	Serial.print("Pushed: ");
 	Serial.print(buttonPushed, DEC);
@@ -220,25 +324,49 @@ void loop() {
 		print_msgStateService(&read_msg);
 	}
 	else if (buttonPushed==2) {
-		Serial.println("SEND HEADER: SetPower");
-		print_header(&setPower_header);
-		Serial.println("SEND MSG: SetPower");
+		uint16_t pow = lifx_getPower();
+		Serial.printf("Power level is %d\r\n", pow);
+		Serial.println();
 
-		if (turnOn) {
-			setPower_msg.level = 65535;
-		}
-		else {
-			setPower_msg.level = 65535;
-		}
-		turnOn = !turnOn;
+		// Serial.println("SEND HEADER: GetPower");
+		// print_header(&getPower_header);
+		// UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+		// UDP.write((char*)(&getPower_header), sizeof(lx_protocol_header_t));
+		// UDP.endPacket();
 
-		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-		UDP.write((char*)(&setPower_header), sizeof(lx_protocol_header_t));
-		UDP.write((char*)(&setPower_msg), sizeof(lx_msg_setPower_t));
-		UDP.endPacket();
+		// delay(500);
+
+		// lx_protocol_header_t read_header;
+		// lx_msg_statePower_t read_msg;
+		// UDP.read((char*) (&read_header), sizeof(lx_protocol_header_t));
+		// UDP.read((char*)(&read_msg), sizeof(lx_msg_statePower_t));
+		// Serial.println("RECEIVED HEADER");
+		// print_header(&read_header);
+		// Serial.println("RECEIVED MESSAGE");
+		// print_msgStatePower(&read_msg);
+
+		// delay(500);
+
+		// Serial.println("SEND HEADER: SetPower");
+		// print_header(&setPower_header);
+
+		// uint16_t level = read_msg.level;
+		// if (level) {
+		// 	setPower_msg.level = 0;
+		// }
+		// else {
+		// 	setPower_msg.level = 65535;
+		// }
+		// Serial.println("SEND MSG: SetPower");
+		// Serial.print("Level: ");
+		// Serial.println(setPower_msg.level, DEC);
+
+		// UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+		// UDP.write((char*)(&setPower_header), sizeof(lx_protocol_header_t));
+		// UDP.write((char*)(&setPower_msg), sizeof(lx_msg_setPower_t));
+		// UDP.endPacket();
 
 	}
 
 	delay(500);
-	buttonPushed = -1;
 }
