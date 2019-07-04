@@ -131,6 +131,7 @@ static void print_msgStatePower(lx_msg_statePower_t* msg) {
 #define LIFX_SOURCE 3549
 
 #define LIFX_TYPE_DISCOVERY 2
+#define LIFX_TYPE_STATESERVICE 3
 #define LIFX_TYPE_GETPOWER 20
 #define LIFX_TYPE_SETPOWER 21
 #define LIFX_TYPE_STATEPOWER 22
@@ -188,57 +189,77 @@ static lx_msg_setPower_t setPower_msg = {
  * LIFX Functions
  */
 
-// void lifx_discover() {
-// 	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-//     UDP.write( (char*) &discovery_header, sizeof(lx_protocol_header_t));
-//     UDP.endPacket();
+uint8_t lifx_discover() {
+	uint8_t found = 0;
 
-//   	unsigned long started = millis();
-//   	while (millis() - started < TIMEOUT_MS) {
-//     	int packetLen = UDP.parsePacket();
-//     	if (packetLen && packetLen < BUFFER_LEN) {
-//      		UDP.read(packetBuffer, sizeof(packetBuffer));
+	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+    UDP.write( (char*) &discovery_header, sizeof(lx_protocol_header_t));
+    UDP.endPacket();
 
-//       		if (((lx_protocol_header_t*)packetBuffer)->type == LIFX_TYPE_STATEPOWER) {
-//         		power = ((lx_msg_statePower_t*)(packetBuffer + sizeof(lx_protocol_header_t)))->level;
-//         		return power;
-//       		} else {
-//         		Serial.print("Unexpected Packet type: ");
-//         		Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
-//       		}
-//     	}
-//   	}
-// }
-
-uint16_t lifx_getPower() {
-  	uint16_t power = 0;
-	
-  	// Send a packet on startup
-  	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-  	UDP.write((char *) &getPower_header, sizeof(lx_protocol_header_t));
-  	UDP.endPacket();
-	
   	unsigned long started = millis();
-  	while (millis() - started < TIMEOUT_MS) {
+  	while (millis() - started < 250) { // Only search for 250ms
   	  	int packetLen = UDP.parsePacket();
   	  	if (packetLen && packetLen < BUFFER_LEN) {
   	  		int read = UDP.read(packetBuffer, packetLen);
 			Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
 			lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
-			lx_msg_statePower_t* payload = (lx_msg_statePower_t*) (packetBuffer + sizeof(lx_protocol_header_t));
+			lx_msg_stateService_t* payload = (lx_msg_stateService_t*) (packetBuffer + sizeof(lx_protocol_header_t));
 			print_header(header);
-			print_msgStatePower(payload);
-  	  		if (header->type == LIFX_TYPE_STATEPOWER) {
-  	  	    	power = payload->level;
-  	  	    	return power;
+			print_msgStateService(payload);
+  	  		if (header->type == LIFX_TYPE_STATESERVICE) {
+  	  	    	++found;
   	  	  	} else {
   	  	    	Serial.print("Unexpected Packet type: ");
   	  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
   	  	  	}
   	  	}
   	}
+
+	return found;
+}
+
+uint16_t lifx_getPower() {
+  	uint16_t power = 0;
+
+	// Try a few times
+	for (uint8_t i = 0; i < 3; ++i) {
+  		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+  		UDP.write((char *) &getPower_header, sizeof(lx_protocol_header_t));
+  		UDP.endPacket();
+
+  		unsigned long started = millis();
+  		while (millis() - started < 250) { // This ones important, wait 750ms for a response.
+  		  	int packetLen = UDP.parsePacket();
+  		  	if (packetLen && packetLen < BUFFER_LEN) {
+  		  		int read = UDP.read(packetBuffer, packetLen);
+				Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
+				lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
+				lx_msg_statePower_t* payload = (lx_msg_statePower_t*) (packetBuffer + sizeof(lx_protocol_header_t));
+				print_header(header);
+				print_msgStatePower(payload);
+  		  		if (header->type == LIFX_TYPE_STATEPOWER) {
+  		  	    	power = payload->level;
+  		  	    	return power;
+  		  	  	} else {
+  		  	    	Serial.print("Unexpected Packet type: ");
+  		  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+  		  	  	}
+  	 	 	}
+  		}
+	}
 	
   	return power;
+}
+
+void lifx_setPower(uint16_t power) {
+	setPower_msg.level = power;
+
+	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+  	UDP.write((char*) &setPower_header, sizeof(lx_protocol_header_t));
+	UDP.write((char*) &setPower_msg, sizeof(lx_msg_setPower_t));
+  	UDP.endPacket();
+
+	return;
 }
 
 /*
@@ -259,7 +280,7 @@ ICACHE_RAM_ATTR void isr_p0() {
  */
 
 void setup() {
-	Serial.begin(115200);
+	Serial.begin(57600);
 	Serial.println();
 
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -279,9 +300,9 @@ void setup() {
 	UDP.begin(LIFX_UDP_PORT);
 
 	/* Setup Interupts */
-	pinMode(2, INPUT_PULLUP);
+	pinMode(2, INPUT);
 	attachInterrupt(digitalPinToInterrupt(2), isr_p2, FALLING);
-	pinMode(0, INPUT_PULLUP);
+	pinMode(0, INPUT);
 	attachInterrupt(digitalPinToInterrupt(0), isr_p0, FALLING);
 
 	Serial.println();
@@ -301,72 +322,19 @@ void loop() {
 	Serial.println();
 
 	if (buttonPushed==0) {
-		Serial.println("SEND HEADER: GetService");
-		print_header(&discovery_header);
-
-		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-		char* discoveryHead_ptr = (char*) (&discovery_header);
-    	UDP.write(discoveryHead_ptr, sizeof(lx_protocol_header_t));
-    	UDP.endPacket();
-
-		delay(500);
-
-		lx_protocol_header_t read_header;
-		lx_msg_stateService_t read_msg;
-
-		int packetSize = UDP.parsePacket();
-		printf("Packet size: %d\n\n", packetSize);
-		UDP.read((char*) (&read_header), sizeof(lx_protocol_header_t));
-		UDP.read((char*)(&read_msg), sizeof(lx_msg_stateService_t));
-		Serial.println("RECEIVED HEADER");
-		print_header(&read_header);
-		Serial.println("RECEIVED MESSAGE");
-		print_msgStateService(&read_msg);
+		uint8_t fnd = lifx_discover();
+		Serial.printf("Found %d devices\r\n", fnd);
+		Serial.println();
 	}
 	else if (buttonPushed==2) {
 		uint16_t pow = lifx_getPower();
 		Serial.printf("Power level is %d\r\n", pow);
 		Serial.println();
 
-		// Serial.println("SEND HEADER: GetPower");
-		// print_header(&getPower_header);
-		// UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-		// UDP.write((char*)(&getPower_header), sizeof(lx_protocol_header_t));
-		// UDP.endPacket();
-
-		// delay(500);
-
-		// lx_protocol_header_t read_header;
-		// lx_msg_statePower_t read_msg;
-		// UDP.read((char*) (&read_header), sizeof(lx_protocol_header_t));
-		// UDP.read((char*)(&read_msg), sizeof(lx_msg_statePower_t));
-		// Serial.println("RECEIVED HEADER");
-		// print_header(&read_header);
-		// Serial.println("RECEIVED MESSAGE");
-		// print_msgStatePower(&read_msg);
-
-		// delay(500);
-
-		// Serial.println("SEND HEADER: SetPower");
-		// print_header(&setPower_header);
-
-		// uint16_t level = read_msg.level;
-		// if (level) {
-		// 	setPower_msg.level = 0;
-		// }
-		// else {
-		// 	setPower_msg.level = 65535;
-		// }
-		// Serial.println("SEND MSG: SetPower");
-		// Serial.print("Level: ");
-		// Serial.println(setPower_msg.level, DEC);
-
-		// UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-		// UDP.write((char*)(&setPower_header), sizeof(lx_protocol_header_t));
-		// UDP.write((char*)(&setPower_msg), sizeof(lx_msg_setPower_t));
-		// UDP.endPacket();
-
+		pow = ~pow;
+		Serial.printf("Setting power to %d\r\n", pow);
+		lifx_setPower(pow);
 	}
 
-	delay(500);
+	delay(50);
 }
