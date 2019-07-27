@@ -5,27 +5,29 @@
 #include <WiFiUdp.h>
 
 /*
- * Addresses and Settings
+ * Addresses and Settings TODO: update these with your settings
  */
 
 // WiFi Settings
-const char *WIFI_SSID = "kcjnet2";
-const char *WIFI_PASSWORD = "pokey.bear7";
+const char *WIFI_SSID = "id";
+const char *WIFI_PASSWORD = "pwd";
+
+// Static IP address (DHCP can take too long)
+IPAddress ip(192,168,1,71);   
+IPAddress gateway(192,168,1,1);   
+IPAddress subnet(255,255,255,0);   
+IPAddress bcast(192,168,1,255);
+
 // LIFX MAC Address
 #define LIFX_TARGET {0xD0, 0x73, 0xD5, 0x30, 0x05, 0x45, 0x00, 0x00}
-#define LIFX_UDP_PORT 56700
+
 
 /*
  * WiFi Setup
  */
 
 #define BUFFER_LEN 128
-
-IPAddress ip(192,168,1,71);   
-IPAddress gateway(192,168,1,1);   
-IPAddress subnet(255,255,255,0);   
-IPAddress bcast(192,168,1,255);
-
+#define LIFX_UDP_PORT 56700
 WiFiUDP UDP;
 char packetBuffer[BUFFER_LEN];
 
@@ -310,21 +312,26 @@ void lifx_setPower(uint16_t power) {
  */
 
 void setup() {
-	WiFi.setAutoConnect(false);   // Not working by its own
-	WiFi.disconnect();  //Prevent connecting to wifi based on previous configuration
-
+	// Keep light on to show that the ESP8266 is not sleeping
 	pinMode(2, OUTPUT);
-	pinMode(2, HIGH);
+	digitalWrite(2, LOW);
+	// WiFi.setAutoConnect(false);   // Not working by its own
+	// WiFi.disconnect();  //Prevent connecting to wifi based on previous configuration
 
+	// Hello world!
 	Serial.begin(57600);
 	Serial.println();
 	Serial.print("MAC: ");
 	Serial.println(WiFi.macAddress());
 	Serial.println("Connecting to WiFi...");
 
+	// Connect to WiFi
 	WiFi.config(ip, gateway, subnet);
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-	WiFi.waitForConnectResult();
+	for (uint16_t i = 0; i < 100; ++i) { // Wait 10s
+		if (WiFi.status() == WL_CONNECTED) { break; }
+		delay(100);
+	}
 	if (WiFi.status() != WL_CONNECTED) { 
 		Serial.println("Could not connect.");
 		return; // Go to loop and sleep
@@ -334,6 +341,7 @@ void setup() {
 	Serial.print("IP address: ");
 	Serial.println(WiFi.localIP());
 
+	// Toggle light
 	UDP.begin(LIFX_UDP_PORT);
 
 	uint16_t pow = lifx_getPower();
@@ -346,5 +354,5 @@ void setup() {
 }
 
 void loop() {
-	ESP.deepSleep(0);
+	ESP.deepSleep(0); // Sleep forever
 }
