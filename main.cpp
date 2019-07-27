@@ -20,11 +20,14 @@ const char *WIFI_PASSWORD = "pokey.bear7";
  */
 
 #define BUFFER_LEN 128
-#define TIMEOUT_MS 500
 
-IPAddress bcastAddr(255, 255, 255, 255);
+IPAddress ip(192,168,1,71);   
+IPAddress gateway(192,168,1,1);   
+IPAddress subnet(255,255,255,0);   
+IPAddress bcast(192,168,1,255);
+
 WiFiUDP UDP;
-char packetBuffer[128];
+char packetBuffer[BUFFER_LEN];
 
 
 /*
@@ -135,6 +138,7 @@ static void print_msgStatePower(lx_msg_statePower_t* msg) {
 #define LIFX_TYPE_GETPOWER 20
 #define LIFX_TYPE_SETPOWER 21
 #define LIFX_TYPE_STATEPOWER 22
+#define LIFX_TYPE_ACKNOWLEDGEMENT 45
 
 static lx_protocol_header_t discovery_header = {
 	sizeof(lx_protocol_header_t), // Size
@@ -176,7 +180,7 @@ static lx_protocol_header_t setPower_header = {
 	LIFX_TARGET, // Target
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, // Reserved
 	0, // Response Requested
-	0, // Acknowledge Requested
+	1, // Acknowledge Requested
 	0, // Sequence
 	LIFX_TYPE_SETPOWER // Type (SetPower)
 };
@@ -189,10 +193,12 @@ static lx_msg_setPower_t setPower_msg = {
  * LIFX Functions
  */
 
+// #define LIFX_DEBUG
+
 uint8_t lifx_discover() {
 	uint8_t found = 0;
 
-	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+	UDP.beginPacket(bcast, LIFX_UDP_PORT);
     UDP.write( (char*) &discovery_header, sizeof(lx_protocol_header_t));
     UDP.endPacket();
 
@@ -201,16 +207,22 @@ uint8_t lifx_discover() {
   	  	int packetLen = UDP.parsePacket();
   	  	if (packetLen && packetLen < BUFFER_LEN) {
   	  		int read = UDP.read(packetBuffer, packetLen);
+			#ifdef LIFX_DEBUG
 			Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
+			#endif
 			lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
 			lx_msg_stateService_t* payload = (lx_msg_stateService_t*) (packetBuffer + sizeof(lx_protocol_header_t));
+			#ifdef LIFX_DEBUG
 			print_header(header);
 			print_msgStateService(payload);
+			#endif
   	  		if (header->type == LIFX_TYPE_STATESERVICE) {
   	  	    	++found;
   	  	  	} else {
+				#ifdef LIFX_DEBUG
   	  	    	Serial.print("Unexpected Packet type: ");
   	  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+				#endif
   	  	  	}
   	  	}
   	}
@@ -222,8 +234,8 @@ uint16_t lifx_getPower() {
   	uint16_t power = 0;
 
 	// Try a few times
-	for (uint8_t i = 0; i < 3; ++i) {
-  		UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
+	for (uint8_t i = 0; i < 8; ++i) { // 2 seconds for response
+  		UDP.beginPacket(bcast, LIFX_UDP_PORT);
   		UDP.write((char *) &getPower_header, sizeof(lx_protocol_header_t));
   		UDP.endPacket();
 
@@ -232,17 +244,23 @@ uint16_t lifx_getPower() {
   		  	int packetLen = UDP.parsePacket();
   		  	if (packetLen && packetLen < BUFFER_LEN) {
   		  		int read = UDP.read(packetBuffer, packetLen);
+				#ifdef LIFX_DEBUG
 				Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
+				#endif
 				lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
 				lx_msg_statePower_t* payload = (lx_msg_statePower_t*) (packetBuffer + sizeof(lx_protocol_header_t));
+				#ifdef LIFX_DEBUG
 				print_header(header);
 				print_msgStatePower(payload);
+				#endif
   		  		if (header->type == LIFX_TYPE_STATEPOWER) {
   		  	    	power = payload->level;
   		  	    	return power;
   		  	  	} else {
+					#ifdef LIFX_DEBUG
   		  	    	Serial.print("Unexpected Packet type: ");
   		  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+					#endif
   		  	  	}
   	 	 	}
   		}
@@ -254,25 +272,37 @@ uint16_t lifx_getPower() {
 void lifx_setPower(uint16_t power) {
 	setPower_msg.level = power;
 
-	UDP.beginPacket(bcastAddr, LIFX_UDP_PORT);
-  	UDP.write((char*) &setPower_header, sizeof(lx_protocol_header_t));
-	UDP.write((char*) &setPower_msg, sizeof(lx_msg_setPower_t));
-  	UDP.endPacket();
+	// Try a few times
+	for (uint8_t i = 0; i < 4; ++i) {
+  		UDP.beginPacket(bcast, LIFX_UDP_PORT);
+  		UDP.write((char*) &setPower_header, sizeof(lx_protocol_header_t));
+		UDP.write((char*) &setPower_msg, sizeof(lx_msg_setPower_t));
+  		UDP.endPacket();
 
+  		unsigned long started = millis();
+  		while (millis() - started < 250) { // This ones important, wait 1s for an acknowledgement.
+  		  	int packetLen = UDP.parsePacket();
+  		  	if (packetLen && packetLen < BUFFER_LEN) {
+  		  		int read = UDP.read(packetBuffer, packetLen);
+				#ifdef LIFX_DEBUG
+				Serial.printf("PacketLen: %d, read: %d\r\n", packetLen, read);
+				#endif
+				lx_protocol_header_t* header = (lx_protocol_header_t*) packetBuffer;
+				#ifdef LIFX_DEBUG
+				print_header(header);
+				#endif
+  		  		if (header->type == LIFX_TYPE_ACKNOWLEDGEMENT) {
+  		  	    	return;
+  		  	  	} else {
+					#ifdef LIFX_DEBUG
+  		  	    	Serial.print("Unexpected Packet type: ");
+  		  	    	Serial.println(((lx_protocol_header_t*)packetBuffer)->type);
+					#endif
+  		  	  	}
+  	 	 	}
+  		}
+	}
 	return;
-}
-
-/*
- * Button Interrupts
- */
-int8_t buttonPushed = -1;
-
-ICACHE_RAM_ATTR void isr_p2() {
-	buttonPushed = 2;
-}
-
-ICACHE_RAM_ATTR void isr_p0() {
-	buttonPushed = 0;
 }
 
 /*
@@ -280,61 +310,41 @@ ICACHE_RAM_ATTR void isr_p0() {
  */
 
 void setup() {
+	WiFi.setAutoConnect(false);   // Not working by its own
+	WiFi.disconnect();  //Prevent connecting to wifi based on previous configuration
+
+	pinMode(2, OUTPUT);
+	pinMode(2, HIGH);
+
 	Serial.begin(57600);
 	Serial.println();
+	Serial.print("MAC: ");
+	Serial.println(WiFi.macAddress());
+	Serial.println("Connecting to WiFi...");
 
+	WiFi.config(ip, gateway, subnet);
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
-		Serial.print(".");
+	WiFi.waitForConnectResult();
+	if (WiFi.status() != WL_CONNECTED) { 
+		Serial.println("Could not connect.");
+		return; // Go to loop and sleep
 	}
 
-	Serial.println();
 	Serial.println("WiFi connected");
-	Serial.println("IP address: ");
+	Serial.print("IP address: ");
 	Serial.println(WiFi.localIP());
-
-	bcastAddr = WiFi.localIP();
-	bcastAddr[3] = 255;
 
 	UDP.begin(LIFX_UDP_PORT);
 
-	/* Setup Interupts */
-	pinMode(2, INPUT);
-	attachInterrupt(digitalPinToInterrupt(2), isr_p2, FALLING);
-	pinMode(0, INPUT);
-	attachInterrupt(digitalPinToInterrupt(0), isr_p0, FALLING);
-
-	Serial.println();
+	uint16_t pow = lifx_getPower();
+	Serial.printf("Power level is %d.\r\n", pow);
+	if (pow > 32768) { pow = 0; }
+	else { pow = 65535; }
+	Serial.printf("Setting power to %d.\r\n", pow);
+	lifx_setPower(pow);
+	return;
 }
 
 void loop() {
-	noInterrupts();
-	buttonPushed = -1;
-	interrupts();
-	while (buttonPushed==-1) {
-		delay(50); // Spinning causes WDT to reset
-	}
-
-	Serial.print("Pushed: ");
-	Serial.print(buttonPushed, DEC);
-	Serial.println();
-	Serial.println();
-
-	if (buttonPushed==0) {
-		uint8_t fnd = lifx_discover();
-		Serial.printf("Found %d devices\r\n", fnd);
-		Serial.println();
-	}
-	else if (buttonPushed==2) {
-		uint16_t pow = lifx_getPower();
-		Serial.printf("Power level is %d\r\n", pow);
-		Serial.println();
-
-		pow = ~pow;
-		Serial.printf("Setting power to %d\r\n", pow);
-		lifx_setPower(pow);
-	}
-
-	delay(50);
+	ESP.deepSleep(0);
 }
