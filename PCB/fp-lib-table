@@ -1,0 +1,3 @@
+(fp_lib_table
+  (lib (name lifxSwitch)(type KiCad)(uri ${KIPRJMOD}/lifxSwitch.pretty)(options "")(descr ""))
+)
