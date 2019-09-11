@@ -1,33 +1,29 @@
-# Reports
-*.rpt
+# For PCBs designed using KiCad: http://www.kicad-pcb.org/
+# Format documentation: http://kicad-pcb.org/help/file-formats/
 
-# CPL data generated from PCB
-*.pos
-
-# KiCAD backup
+# Temporary files
+*.000
 *.bak
 *.bck
 *.kicad_pcb-bak
-*.sch-bak
-_saved_*
-
-# Netlists
-*.net
-
-# BOM plugin output
-*.csv.tmp
-*.csv
-*.xml
-
-# Gerbers
-*.gbr
-
-# Drill files
-*.drl
-
-# Footprint info cache
+*~
+_autosave-*
+*.tmp
+*-rescue.lib
+*-save.pro
+*-save.kicad_pcb
 fp-info-cache
 
-# Autosave files
-_autosave-*
+# Footprint cache
+fp-info-cache
 
+# Netlist files (exported from Eeschema)
+*.net
+
+# Autorouter files (exported from Pcbnew)
+*.dsn
+*.ses
+
+# Exported BOM files
+*.xml
+*.csv
