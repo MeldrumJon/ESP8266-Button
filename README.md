@@ -37,7 +37,8 @@ A battery-powered "light switch" which toggles a LIFX bulb's power through the
 1. Set the slide switch to hold GPIO0 low.
 2. In VSCode, press F1 and run command "Arduino: Upload"
 3. Once esptool.py begins trying to connect, press the pushbutton (momentarily hold RST low).
-4. Move the slide switch back to hold GPIO0 high.
+4. Wait for esptool to finish programming the ESP8266.
+5. Move the slide switch back to hold GPIO0 high.
 
 ## PCB
 
