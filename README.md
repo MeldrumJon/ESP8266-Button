@@ -1,10 +1,9 @@
 # ESP8266-Button
 
-A battery-powered WiFi button using an ESP8266-01 module.  Can be used to 
+A battery-powered WiFi button using an ESP8266-01 module.  Can be used as an [IFTTT](https://ifttt.com/) trigger through 
+[Webhooks](https://ifttt.com/maker_webhooks) or to 
 control a LIFX bulb's power through the 
-[LIFX LAN Protocol](https://lan.developer.lifx.com/),
-or as an [IFTTT](https://ifttt.com/) trigger through 
-[Webhooks](https://ifttt.com/maker_webhooks).
+[LIFX LAN Protocol](https://lan.developer.lifx.com/).
 
 
 ## Parts
