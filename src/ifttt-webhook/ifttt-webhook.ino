@@ -1,4 +1,4 @@
-// Based on https://github.com/aijayadams/esp8266-lifx
+// Based on https://github.com/RuiSantosdotme/Random-Nerd-Tutorials/blob/master/Projects/ESP8266_WiFi_Button.ino
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
@@ -41,7 +41,6 @@ void setup()
     pinMode(2, OUTPUT);
     digitalWrite(2, LOW);
 
-    // Hello world!
     Serial.begin(115200);
     //Serial.setDebugOutput(true);
     Serial.println();

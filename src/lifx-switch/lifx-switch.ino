@@ -12,11 +12,13 @@
 const char* const WIFI_SSID = "wifi_name"; // TODO: replace with your SSID
 const char* const WIFI_PASSWORD = "password"; // TODO: replace with your password
 
-// Static IP address (DHCP can take too long)
-IPAddress ip(192, 168, 1, 71); // TODO: assign a static IP to this device on your router
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
-IPAddress bcast(192, 168, 1, 255);
+// Static IP address (for speed: using DHCP takes awhile)
+// TODO: Set IP, GATEWAY, SUBNET, DNS and BCAST to match router settings
+IPAddress IP(192, 168, 1, 71); // TODO: assign a static IP to this device on your router
+IPAddress GATEWAY(192, 168, 1, 1);
+IPAddress SUBNET(255, 255, 255, 0);
+IPAddress DNS(192, 168, 1, 1);
+IPAddress BCAST(192, 168, 1, 255);
 
 // LIFX MAC Address
 // TODO: replace with your LIFX bulb's MAC address
@@ -26,13 +28,13 @@ IPAddress bcast(192, 168, 1, 255);
     }
 
 /*
- * WiFi Setup
+ * UDP Setup
  */
 
-#define BUFFER_LEN 128
 #define LIFX_UDP_PORT 56700
-WiFiUDP UDP;
+#define BUFFER_LEN 128
 char packetBuffer[BUFFER_LEN];
+WiFiUDP UDP;
 
 /*
  * LIFX Packets
@@ -207,7 +209,7 @@ int lifx_discover()
 {
     int found = 0;
 
-    UDP.beginPacket(bcast, LIFX_UDP_PORT);
+    UDP.beginPacket(BCAST, LIFX_UDP_PORT);
     UDP.write((char*)&discovery_header, sizeof(lx_protocol_header_t));
     UDP.endPacket();
 
@@ -245,7 +247,7 @@ uint16_t lifx_getPower()
 
     // Try a few times
     for (int i = 0; i < 8; ++i) { // 2 seconds for response
-        UDP.beginPacket(bcast, LIFX_UDP_PORT);
+        UDP.beginPacket(BCAST, LIFX_UDP_PORT);
         UDP.write((char*)&getPower_header, sizeof(lx_protocol_header_t));
         UDP.endPacket();
 
@@ -285,7 +287,7 @@ void lifx_setPower(uint16_t power)
 
     // Try a few times
     for (int i = 0; i < 4; ++i) {
-        UDP.beginPacket(bcast, LIFX_UDP_PORT);
+        UDP.beginPacket(BCAST, LIFX_UDP_PORT);
         UDP.write((char*)&setPower_header, sizeof(lx_protocol_header_t));
         UDP.write((char*)&setPower_msg, sizeof(lx_msg_setPower_t));
         UDP.endPacket();
@@ -322,32 +324,32 @@ void lifx_setPower(uint16_t power)
 
 void setup()
 {
+    unsigned long timeout;
+
     // Keep light on to show that the ESP8266 is not sleeping
     pinMode(2, OUTPUT);
     digitalWrite(2, LOW);
-    // WiFi.setAutoConnect(false);   // Not working by its own
-    // WiFi.disconnect();  //Prevent connecting to wifi based on previous configuration
 
-    // Hello world!
-    Serial.begin(57600);
+    Serial.begin(115200);
+    //Serial.setDebugOutput(true);
     Serial.println();
     Serial.print("MAC: ");
     Serial.println(WiFi.macAddress());
     Serial.println("Connecting to WiFi...");
 
     // Connect to WiFi
-    WiFi.config(ip, gateway, subnet);
+    WiFi.config(IP, GATEWAY, SUBNET, DNS); // Comment out to use DHCP
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    unsigned long timeout = millis() + 10000; // wait 10s
+    timeout = millis() + 10000; // wait 10s
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() > timeout) {
             break;
         }
-        delay(1);
+        delay(1); // keep WDT happy
     }
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("Could not connect.");
-        return; // Go to loop and sleep
+        return; // Go to sleep
     }
 
     Serial.println("WiFi connected");
