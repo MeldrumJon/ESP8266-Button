@@ -1,11 +1,15 @@
-# ESP8266-LIFX-Switch
+# ESP8266-Button
 
-A battery-powered "light switch" which toggles a LIFX bulb's power through the 
-[LIFX LAN Protocol](https://lan.developer.lifx.com/).
+A battery-powered WiFi button using an ESP8266-01 module.  Can be used to 
+control a LIFX bulb's power through the 
+[LIFX LAN Protocol](https://lan.developer.lifx.com/),
+or as an [IFTTT](https://ifttt.com/) trigger through 
+[Webhooks](https://ifttt.com/maker_webhooks).
+
 
 ## Parts
 
-- ESP8266-01S module
+- ESP8266-01 module
 - Low quiescent current LDO 3.3V voltage regulator ([MCP1826S-3302E/AB](https://www.mouser.com/ProductDetail/579-MCP1826S-3302EAB))
 - 4.7uF electrolytic capacitor
 - 1uF electrolytic capacitor
@@ -26,19 +30,28 @@ A battery-powered "light switch" which toggles a LIFX bulb's power through the
 ## Setup
 
 1. [Install the ESP8266 Arduino Core](https://github.com/esp8266/Arduino#installing-with-boards-manager)
-2. Open the ESP8266-LIFX-Switch project folder in VSCode.
-3. Install the [Arduino extension](https://marketplace.visualstudio.com/items?itemName=vsciot-vscode.vscode-arduino) for VSCode.
-3. Connect the serial adapter's TX signal to RX on the ESP8266, RX to TX and GND to GND.
-    - There's no GND pin header on the PCB, instead connect an alligator clip to the voltage regulator's tab.
-4. Update the WiFi SSID, IP addresses, and LIFX Bulb's MAC address in the `Addresses and Settings` section at the top of `main.cpp`.
+2. Open one of the projects in [src/](./src/) in Arduino IDE.
+3. In Arduino IDE,
+	- Set `Tools->Board` to "Generic ESP8266 Module".
+	- Set `Tools->Port` to your USB TTL Serial Adapter.
+4. Connect the serial adapter's TX signal to RX on the ESP8266, RX to TX and 
+GND to GND.
+	- On the PCB, RX is the pin closest to the ESP8266-01's antenna.
+    - There's no GND pin header on the PCB, instead connect an alligator clip 
+ 	to the voltage regulator's tab.
+5. Update the `WIFI_SSID`, `WIFI_PASSWORD` and any other variables/macros marked
+"TODO" to match your WiFi settings.
 
 ## Programming
 
 1. Set the slide switch to hold GPIO0 low.
-2. In VSCode, press F1 and run command "Arduino: Upload"
-3. Once esptool.py begins trying to connect, press the pushbutton (momentarily hold RST low).
+	- On the PCB, slide towards the ESP8266-01 antenna.
+2. Upload the sketch.
+3. Whenever esptool.py tries to connect, press the pushbutton (to momentarily
+hold RST low).
 4. Wait for esptool to finish programming the ESP8266.
 5. Move the slide switch back to hold GPIO0 high.
+	- On the PCB, slide away from the ESP8266-01 antenna.
 
 ## PCB
 
