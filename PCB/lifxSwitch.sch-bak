@@ -359,9 +359,9 @@ F 3 "~" H 6800 2050 50  0001 C CNN
 	1    6800 2050
 	1    0    0    -1  
 $EndComp
-Text Label 6350 1950 2    50   ~ 0
-RX
 Text Label 6350 2050 2    50   ~ 0
+RX
+Text Label 6350 1950 2    50   ~ 0
 TX
 $Comp
 L power:GND #PWR0101
