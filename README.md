@@ -54,7 +54,7 @@ hold RST low).
 
 ## PCB
 
-KiCAD files are in [the `PCB` Folder](./PCB).  PCB made at [OSH Park](https://oshpark.com/).
+KiCAD files are in [the `hardware` Folder](./hardware).  PCB made at [OSH Park](https://oshpark.com/).
 
 ![Manufactured PCB](../assets/PCB.jpg?raw=true)
 
