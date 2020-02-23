@@ -1,8 +1,11 @@
 # ESP8266-Button
 
-A battery-powered WiFi button using an ESP8266-01 module.  Can be used as an [IFTTT](https://ifttt.com/) trigger through 
+Battery-powered WiFi button.
+
+Can be used as an [IFTTT](https://ifttt.com/) trigger through 
 [Webhooks](https://ifttt.com/maker_webhooks) or to 
-control a LIFX bulb's power through the 
+control LIFX smart lights through the 
+[LIFX HTTP API](https://api.developer.lifx.com/) or 
 [LIFX LAN Protocol](https://lan.developer.lifx.com/).
 
 
@@ -13,10 +16,12 @@ control a LIFX bulb's power through the
 - 4.7uF electrolytic capacitor
 - 1uF electrolytic capacitor
 - Momentary pushbutton switch
-- SPDT mini slide switch, 3-pin, 2.54mm (0.1") pin spacing
+- SPDT mini slide switch, 3-pin, 2.54mm pin spacing
 - 2x 1k resistors
-- Breakaway headers
 - Battery holder for 3xAA or 3xAAA batteries
+- Breakaway headers (optional, for ESP8266-01 module)
+- 2-pin JST connector cables (optional, useful for buttons or batteries)
+- Project Box 100x60x25 mm; inside dimensions: 96x56x23 mm
 
 ## Tools
 
@@ -35,22 +40,17 @@ control a LIFX bulb's power through the
 	- Set `Tools->Port` to your USB TTL Serial Adapter.
 4. Connect the serial adapter's TX signal to RX on the ESP8266, RX to TX and 
 GND to GND.
-	- On the PCB, RX is the pin closest to the ESP8266-01's antenna.
-    - There's no GND pin header on the PCB, instead connect an alligator clip 
- 	to the voltage regulator's tab.
 5. Update the `WIFI_SSID`, `WIFI_PASSWORD` and any other variables/macros marked
 "TODO" to match your WiFi settings.
 
 ## Programming
 
 1. Set the slide switch to hold GPIO0 low.
-	- On the PCB, slide towards the ESP8266-01 antenna.
 2. Upload the sketch.
 3. Whenever esptool.py tries to connect, press the pushbutton (to momentarily
 hold RST low).
 4. Wait for esptool to finish programming the ESP8266.
 5. Move the slide switch back to hold GPIO0 high.
-	- On the PCB, slide away from the ESP8266-01 antenna.
 
 ## PCB
 
