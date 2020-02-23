@@ -9,6 +9,8 @@ control LIFX smart lights through the
 [LIFX LAN Protocol](https://lan.developer.lifx.com/).
 
 
+![Button with Enclosure](../assets/Button.png?raw=true)
+
 ## Parts
 
 - ESP8266-01 module
@@ -27,11 +29,20 @@ control LIFX smart lights through the
 
 - USB to TTL Serial **3.3V** adapter
 
-## Schematic
+## PCB
+
+KiCAD files are in [the `hardware` Folder](./hardware).
 
 ![ESP8266 LIFX Switch Schematic](../assets/Schematic.png?raw=true)
 
-## Setup
+## Assembled Box
+
+![ESP8266-Button Assembled](../assets/Assembly.png?raw=true)
+
+
+## Programming
+
+### Setup
 
 1. [Install the ESP8266 Arduino Core](https://github.com/esp8266/Arduino#installing-with-boards-manager)
 2. Open one of the projects in [src/](./src/) in Arduino IDE.
@@ -43,7 +54,7 @@ GND to GND.
 5. Update the `WIFI_SSID`, `WIFI_PASSWORD` and any other variables/macros marked
 "TODO" to match your WiFi settings.
 
-## Programming
+### Uploading
 
 1. Set the slide switch to hold GPIO0 low.
 2. Upload the sketch.
@@ -51,10 +62,4 @@ GND to GND.
 hold RST low).
 4. Wait for esptool to finish programming the ESP8266.
 5. Move the slide switch back to hold GPIO0 high.
-
-## PCB
-
-KiCAD files are in [the `hardware` Folder](./hardware).
-
-![Manufactured PCB](../assets/PCB.jpg?raw=true)
 
