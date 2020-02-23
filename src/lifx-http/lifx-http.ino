@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
 
 /*
  * Addresses and Settings
@@ -10,7 +11,7 @@
 // WiFi Settings
 // TODO: Replace with your WiFi name and password
 const char* const WIFI_SSID = "XXXXX";
-const char* const WIFI_PASSWORD = "XXXXXX";
+const char* const WIFI_PASSWORD = "XXXXXXXX";
 
 // Static IP address (for speed: using DHCP takes awhile)
 // TODO: Set IP, GATEWAY, SUBNET, DNS to match router settings
@@ -20,16 +21,17 @@ IPAddress GATEWAY(192, 168, 1, 1);
 IPAddress SUBNET(255, 255, 255, 0);
 IPAddress DNS(192, 168, 1, 1);
 
-// TODO: Update the trigger and API key
-const char* const SERVER = "maker.ifttt.com";
-const char* const RESOURCE = "/trigger/btn_press/with/key/XXXXXXXXXXXXXXXXXXXXXX";
+// TODO: Update API key and change resource to desired command
+const char* const SERVER = "api.lifx.com";
+const char* const RESOURCE = "/v1/lights/group:Porch/toggle";
+const char* const API_KEY = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
 /*
- * HTTP Setup
+ * HTTPS Setup
  */
 
-#define PORT 80
-WiFiClient client;
+#define PORT 443
+WiFiClientSecure client;
 
 /*
  * Wifi Setup
@@ -62,13 +64,16 @@ void setup()
         delay(1); // keep WDT happy
     }
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("Could not connect.");
+        Serial.println("Could not connect to WiFi.");
         return; // Go to sleep
     }
 
     Serial.println("WiFi connected");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+
+    // Don't worry about certificates
+    client.setInsecure();
 
     // Connect to IFTTT web service
     Serial.print("Connecting to ");
@@ -79,9 +84,9 @@ void setup()
     }
     Serial.print("Requesting resource ");
     Serial.println(RESOURCE);
-    client.print(String("GET ") + RESOURCE + 
-                  " HTTP/1.1\r\n" +
+    client.print(String("POST ") + RESOURCE + " HTTP/1.1\r\n" +
                   "Host: " + SERVER + "\r\n" + 
+                  "Authorization: Bearer " + API_KEY + "\r\n" +
                   "Connection: close\r\n\r\n");
 
     // Wait for Response

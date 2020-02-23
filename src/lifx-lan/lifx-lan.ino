@@ -5,27 +5,26 @@
 #include <WiFiUdp.h>
 
 /*
- * Addresses and Settings TODO: update these with your settings
+ * Addresses and Settings
  */
 
 // WiFi Settings
-const char* const WIFI_SSID = "wifi_name"; // TODO: replace with your SSID
-const char* const WIFI_PASSWORD = "password"; // TODO: replace with your password
+// TODO: Replace with your WiFi name and password
+const char* const WIFI_SSID = "XXXXX";
+const char* const WIFI_PASSWORD = "XXXXXXXX";
 
 // Static IP address (for speed: using DHCP takes awhile)
-// TODO: Set IP, GATEWAY, SUBNET, DNS and BCAST to match router settings
-IPAddress IP(192, 168, 1, 71); // TODO: assign a static IP to this device on your router
+// TODO: Set IP, GATEWAY, SUBNET, DNS to match router settings
+// TODO: Assign a static IP to this device on your router
+IPAddress IP(192, 168, 1, 71);
 IPAddress GATEWAY(192, 168, 1, 1);
 IPAddress SUBNET(255, 255, 255, 0);
 IPAddress DNS(192, 168, 1, 1);
 IPAddress BCAST(192, 168, 1, 255);
 
 // LIFX MAC Address
-// TODO: replace with your LIFX bulb's MAC address
-#define LIFX_TARGET                                    \
-    {                                                  \
-        0xD0, 0x73, 0xD5, 0x30, 0x05, 0x45, 0x00, 0x00 \
-    }
+// TODO: Replace with your LIFX bulb's MAC address
+#define LIFX_TARGET {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x00, 0x00}
 
 /*
  * UDP Setup
@@ -338,6 +337,7 @@ void setup()
     Serial.println("Connecting to WiFi...");
 
     // Connect to WiFi
+    WiFi.mode(WIFI_STA);
     WiFi.config(IP, GATEWAY, SUBNET, DNS); // Comment out to use DHCP
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     timeout = millis() + 10000; // wait 10s
